@@ -1,0 +1,273 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Habit Tracker</title>
+  <link rel="stylesheet" href="styles.css" />
+  <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script type="module" src="app.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <div class="logo">✓</div>
+      <div>
+        <div class="title">Habit Tracker</div>
+        <div class="subtitle">Daily ticks → weekly/monthly/yearly reports</div>
+      </div>
+    </div>
+
+    <div class="top-actions">
+      <button id="btnSync" class="btn">Sync</button>
+      <button id="btnExport" class="btn">Export</button>
+      <button id="btnImport" class="btn">Import</button>
+      <button id="btnSettings" class="btn btn-primary">Settings</button>
+    </div>
+  </header>
+
+  <!-- Login Gate (privacy gate, not true security) -->
+  <div id="loginOverlay" class="overlay">
+    <div class="modal">
+      <h2>Login</h2>
+      <p class="muted">
+        This login is a <b>privacy gate</b> for your public GitHub Pages site.
+        Real security comes from protecting your data API (we do that with an API key in Settings).
+      </p>
+
+      <div class="grid2">
+        <label>
+          Username
+          <input id="loginUser" name="loginUser" type="text" autocomplete="username" />
+        </label>
+        <label>
+          Password
+          <input id="loginPass" name="loginPass" type="password" autocomplete="current-password" />
+        </label>
+      </div>
+
+      <div class="row">
+        <button id="btnLogin" class="btn btn-primary">Login</button>
+        <button id="btnFirstSetup" class="btn">First-time setup</button>
+      </div>
+
+      <details class="help">
+        <summary>How “secure” is this?</summary>
+        <p>
+          GitHub Pages is public. Any “client-side login” can be bypassed by someone technical.
+          The important part is that your <b>Google Sheet API endpoint requires an API key</b>
+          that is stored only on <b>your devices</b> (browser localStorage), not in this repo.
+        </p>
+      </details>
+    </div>
+  </div>
+
+  <main class="container" id="appRoot" aria-hidden="true">
+    <section class="card">
+      <div class="card-head">
+        <h2>Today</h2>
+        <div class="row">
+          <label class="inline">
+            Date
+            <input id="datePicker" name="datePicker" type="date" />
+          </label>
+          <button id="btnSaveDay" class="btn btn-primary">Save day</button>
+          <span id="saveStatus" class="muted"></span>
+        </div>
+      </div>
+
+      <div class="table-wrap">
+        <table id="habitsTable" class="table">
+          <thead>
+            <tr>
+              <th>Habit</th>
+              <th class="center">Done</th>
+              <th>Details (optional)</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+
+      <div class="muted small">
+        Tip: set “Running” details to kms (e.g., <code>5</code> or <code>5.2</code>), and “Research paper” details to paper title.
+      </div>
+    </section>
+
+    <section class="grid">
+      <section class="card">
+        <div class="card-head">
+          <h2>Quick report</h2>
+          <div class="row">
+            <select id="rangeSelect" name="rangeSelect">
+              <option value="7">Last 7 days</option>
+              <option value="30" selected>Last 30 days</option>
+              <option value="90">Last 90 days</option>
+              <option value="365">Last 365 days</option>
+              <option value="month">This month</option>
+              <option value="year">This year</option>
+            </select>
+            <button id="btnRefresh" class="btn">Refresh</button>
+          </div>
+        </div>
+        <canvas id="chartCompletion" height="140"></canvas>
+        <div id="quickStats" class="stats"></div>
+      </section>
+
+      <section class="card">
+        <div class="card-head">
+          <h2>Trends</h2>
+          <div class="row">
+            <select id="habitTrendSelect" name="habitTrendSelect"></select>
+          </div>
+        </div>
+        <canvas id="chartTrend" height="140"></canvas>
+        <div class="muted small" id="trendHint"></div>
+      </section>
+    </section>
+
+    <section class="card">
+      <div class="card-head">
+        <h2>Log (for selected range)</h2>
+      </div>
+      <div class="table-wrap">
+        <table class="table" id="logTable">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Habit</th>
+              <th class="center">Done</th>
+              <th>Details</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <!-- Settings -->
+  <div id="settingsOverlay" class="overlay hidden">
+    <div class="modal wide">
+      <div class="row space-between">
+        <h2>Settings</h2>
+        <button id="btnCloseSettings" class="btn">Close</button>
+      </div>
+
+      <section class="settings-grid">
+        <div class="box">
+          <h3>Privacy gate credentials (per device)</h3>
+          <p class="muted small">
+            This is only to hide the UI from casual visitors. It does not protect your code.
+          </p>
+
+          <div class="grid2">
+            <label>
+              New username
+              <input id="setUser" name="setUser" type="text" autocomplete="username" />
+            </label>
+            <label>
+              New password
+              <input id="setPass" name="setPass" type="password" autocomplete="new-password" />
+            </label>
+          </div>
+          <div class="row">
+            <button id="btnSaveCreds" class="btn btn-primary">Save credentials</button>
+            <button id="btnLogout" class="btn">Logout</button>
+            <span id="credsStatus" class="muted"></span>
+          </div>
+        </div>
+
+        <div class="box">
+          <h3>Firebase sync (recommended)</h3>
+          <p class="muted small">
+            Store your daily logs in <b>Firebase</b> (Auth + Firestore). Your habit data will sync across reloads and (if you use Email/Password login) across devices.
+          </p>
+
+          <label>
+            Firebase config JSON
+            <textarea id="fbConfig" name="fbConfig" rows="7" placeholder='Paste from Firebase Console → Project settings → Your apps → SDK setup and configuration → Config (JSON)'></textarea>
+          </label>
+
+          <div class="grid2">
+            <label>
+              Email (optional, for cross-device sync)
+              <input id="fbEmail" name="fbEmail" type="email" placeholder="you@example.com" autocomplete="email" />
+            </label>
+            <label>
+              Password (optional)
+              <input id="fbPass" name="fbPass" type="password" placeholder="••••••••" autocomplete="current-password" />
+            </label>
+          </div>
+
+          <div class="row">
+            <button id="btnSaveApi" class="btn btn-primary">Save Firebase config</button>
+            <button id="btnTestApi" class="btn">Test</button>
+            <button id="btnFbSignIn" class="btn">Sign in</button>
+            <button id="btnFbCreateAccount" class="btn">Create account</button>
+            <button id="btnFbSignOut" class="btn">Sign out</button>
+            <span id="apiStatus" class="muted"></span>
+          </div>
+
+          <div class="muted small">Cloud user: <span id="fbUserStatus">Not signed in</span></div>
+        </div>
+
+        <div class="box">
+          <h3>Habits</h3>
+          <p class="muted small">
+            Add new habits anytime. Choose whether the habit needs a “details” text box.
+          </p>
+
+          <div class="grid2">
+            <label>
+              Habit name
+              <input id="newHabitName" name="newHabitName" type="text" placeholder="e.g., Meditation" />
+            </label>
+            <label class="inline">
+              Has details text?
+              <select id="newHabitHasText" name="newHabitHasText">
+                <option value="false" selected>No</option>
+                <option value="true">Yes</option>
+              </select>
+            </label>
+          </div>
+          <label>
+            Details label (optional)
+            <input id="newHabitTextLabel" name="newHabitTextLabel" type="text" placeholder="e.g., Minutes / Book name / kms" />
+          </label>
+
+          <div class="row">
+            <button id="btnAddHabit" class="btn btn-primary">Add habit</button>
+            <span id="habitStatus" class="muted"></span>
+          </div>
+
+          <div class="table-wrap">
+            <table class="table" id="habitsAdminTable">
+              <thead>
+                <tr>
+                  <th>Habit</th>
+                  <th>Details?</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="box">
+          <h3>Backup</h3>
+          <p class="muted small">Export/Import your data as JSON (handy if you change browsers/devices).</p>
+          <div class="row">
+            <button id="btnExport2" class="btn">Export JSON</button>
+            <button id="btnImport2" class="btn">Import JSON</button>
+          </div>
+          <input id="fileImport" name="fileImport" type="file" accept="application/json" class="hidden" />
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <input id="fileImportMain" name="fileImportMain" type="file" accept="application/json" class="hidden" />
+</body>
+</html>
